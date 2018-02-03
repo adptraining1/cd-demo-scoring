@@ -1,5 +1,8 @@
 package com.innoq.mploed.ddd.scoring.service;
 
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.innoq.mploed.ddd.scoring.shared.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,9 +29,16 @@ public class ScoringServiceImpl implements ScoringService {
 
     private RestTemplate restTemplate;
 
+    private Timer agencyTimer;
+
+    private Meter agencyMeter;
+
     @Autowired
-    public ScoringServiceImpl(RestTemplate restTemplate) {
+    public ScoringServiceImpl(RestTemplate restTemplate, MetricRegistry metricRegistry) {
+        this.agencyMeter = metricRegistry.meter("agency-calls");
+        this.agencyTimer = metricRegistry.timer("agency-timer");
         this.restTemplate = restTemplate;
+
     }
 
     @Override
@@ -48,14 +58,21 @@ public class ScoringServiceImpl implements ScoringService {
 
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
-        HttpEntity<AgencyResult> response = restTemplate.exchange(
-                builder.build().encode().toUri(),
-                HttpMethod.GET,
-                entity,
-                AgencyResult.class);
+        Timer.Context timer = agencyTimer.time();
+        AgencyResult agencyResult;
+        try {
+            HttpEntity<AgencyResult> response = restTemplate.exchange(
+                    builder.build().encode().toUri(),
+                    HttpMethod.GET,
+                    entity,
+                    AgencyResult.class);
 
 
-        AgencyResult agencyResult = response.getBody();
+            agencyResult = response.getBody();
+            agencyMeter.mark();
+        } finally {
+            timer.stop();
+        }
         result.setAgencyResult(agencyResult);
         if(scoringInput.getIncome() - scoringInput.getSpendings() > scoringInput.getMonthlyPayment()) {
             points += 50;
