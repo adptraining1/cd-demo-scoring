@@ -5,5 +5,7 @@ management:
   info:
     git:
       mode: full
+  security:
+    enabled: false
 
 creditAgencyServer: http://localhost:9092/
